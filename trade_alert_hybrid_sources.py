@@ -6,14 +6,14 @@ import numpy as np
 import yfinance as yf
 
 # إعدادات Pushover
-PUSHOVER_USER_KEY = "YOUR_PUSHOVER_USER_KEY"
-PUSHOVER_API_TOKEN = "YOUR_PUSHOVER_API_TOKEN"
+PUSHOVER_USER_KEY = "u54qxthbdx8cqp59xqifdgqmxei3vs"
+PUSHOVER_API_TOKEN = "aib8wfs7bfcojpuk9iv7oomp2wkc3x"
 
 # TwelveData API
-TWELVE_API_KEY = "YOUR_TWELVE_API_KEY"
+TWELVE_API_KEY = "048a37af69584964b367325d5f3a3886"
 
 # NewsAPI
-NEWSAPI_KEY = "YOUR_NEWSAPI_KEY"
+NEWSAPI_KEY = "1e194297923f4837a44df3fd96a6c869"
 
 # تصنيف الأصول حسب المصدر
 TWELVE_ASSETS = ["XAU/USD", "BTC/USD", "EUR/USD"]
