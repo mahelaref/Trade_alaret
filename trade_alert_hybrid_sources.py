@@ -5,17 +5,17 @@ from datetime import datetime, timedelta
 import numpy as np
 import yfinance as yf
 
-# إعدادات Pushover
-PUSHOVER_USER_KEY = "u54qxthbdx8cqp59xqifdgqmxei3vs"
-PUSHOVER_API_TOKEN = "aib8wfs7bfcojpuk9iv7oomp2wkc3x"
+# Pushover credentials
+PUSHOVER_USER_KEY = "YOUR_PUSHOVER_USER_KEY"
+PUSHOVER_API_TOKEN = "YOUR_PUSHOVER_API_TOKEN"
 
 # TwelveData API
-TWELVE_API_KEY = "048a37af69584964b367325d5f3a3886"
+TWELVE_API_KEY = "YOUR_TWELVE_API_KEY"
 
 # NewsAPI
-NEWSAPI_KEY = "1e194297923f4837a44df3fd96a6c869"
+NEWSAPI_KEY = "YOUR_NEWSAPI_KEY"
 
-# تصنيف الأصول حسب المصدر
+# Assets
 TWELVE_ASSETS = ["XAU/USD", "BTC/USD", "EUR/USD"]
 YF_ASSETS = {
     "US100": "^NDX",
@@ -23,13 +23,13 @@ YF_ASSETS = {
     "XAG/USD": "SI=F"
 }
 
-def send_pushover_alert(message, title="Trade Alert"):
+def send_pushover_alert(message, title="Market Opportunity"):
     payload = {
         "token": PUSHOVER_API_TOKEN,
         "user": PUSHOVER_USER_KEY,
         "message": message,
         "title": title,
-           "sound": "siren",
+        "sound": "siren",
         "priority": 1
     }
     requests.post("https://api.pushover.net/1/messages.json", data=payload)
@@ -53,8 +53,7 @@ def get_yf_data(yf_symbol):
         raise ValueError(f"No Yahoo Finance data for {yf_symbol}")
     df = data.reset_index()
     df.rename(columns={"Datetime": "datetime", "Open": "open", "High": "high", "Low": "low", "Close": "close"}, inplace=True)
-    df = df[["datetime", "open", "high", "low", "close"]]
-    return df
+    return df[["datetime", "open", "high", "low", "close"]]
 
 def calculate_rsi(data, period=14):
     delta = data["close"].diff()
@@ -74,91 +73,64 @@ def calculate_atr(df, period=14):
     atr = tr.rolling(window=period).mean()
     return atr.iloc[-1]
 
-def get_current_session():
-    hour = datetime.utcnow().hour
-    if 0 <= hour < 7:
-        return "Tokyo"
-    elif 7 <= hour < 13:
-        return "London"
-    elif 13 <= hour < 20:
-        return "New York"
-    else:
-        return "Off Hours"
-
-def extract_session_high_low(df, session):
-    df["hour"] = df["datetime"].dt.hour
-    if session == "Tokyo":
-        session_df = df[(df["hour"] >= 0) & (df["hour"] < 7)]
-    elif session == "London":
-        session_df = df[(df["hour"] >= 7) & (df["hour"] < 13)]
-    elif session == "New York":
-        session_df = df[(df["hour"] >= 13) & (df["hour"] < 20)]
-    else:
-        session_df = df[(df["hour"] >= 20) | (df["hour"] < 0)]
-    return session_df["high"].max(), session_df["low"].min()
-
 def detect_fvg(df):
     for i in range(1, len(df) - 1):
         if df["low"].iloc[i] > df["high"].iloc[i-1] and df["high"].iloc[i] < df["low"].iloc[i+1]:
-            return f"FVG at {df['datetime'].iloc[i]}"
-    return "No FVG"
-
-def detect_liquidity_sweep(df):
-    prev_high = df["high"].shift(1)
-    prev_low = df["low"].shift(1)
-    sweep_up = (df["high"] > prev_high) & (df["close"] < prev_high)
-    sweep_down = (df["low"] < prev_low) & (df["close"] > prev_low)
-    if sweep_up.any():
-        return "Sweep UP"
-    elif sweep_down.any():
-        return "Sweep DOWN"
-    return "No sweep"
+            return df["datetime"].iloc[i]
+    return None
 
 def fetch_market_news():
-    url = f"https://newsapi.org/v2/everything?q=market OR FED OR inflation&language=en&sortBy=publishedAt&pageSize=3&apiKey={NEWSAPI_KEY}"
+    url = f"https://newsapi.org/v2/everything?q=market OR FED OR inflation&language=en&sortBy=publishedAt&pageSize=1&apiKey={NEWSAPI_KEY}"
     response = requests.get(url)
     data = response.json()
     if "articles" in data and len(data["articles"]) > 0:
-        headline = data["articles"][0]["title"]
-        if "rally" in headline.lower() or "gain" in headline.lower():
-            sentiment = "Bullish"
-        elif "drop" in headline.lower() or "loss" in headline.lower():
-            sentiment = "Bearish"
-        else:
-            sentiment = "Neutral"
-        return f"{sentiment} news: {headline}"
-    return "No news data"
+        article = data["articles"][0]
+        return f"{article['title']} ({article['source']['name']})"
+    return "No recent news"
 
 def analyze_asset(symbol, df):
     price = df["close"].iloc[-1]
     rsi = calculate_rsi(df)
     atr = calculate_atr(df)
     now = datetime.now()
-    session = get_current_session()
-    high_now, low_now = extract_session_high_low(df[df["datetime"].dt.date == now.date()], session)
+
+    # Prepare session data
+    df["hour"] = df["datetime"].dt.hour
+    df["date"] = df["datetime"].dt.date
     yesterday = now.date() - timedelta(days=1)
-    high_prev, low_prev = extract_session_high_low(df[df["datetime"].dt.date == yesterday], session)
-    fvg = detect_fvg(df)
-    liquidity = detect_liquidity_sweep(df)
+    today_df = df[df["date"] == now.date()]
+    prev_df = df[df["date"] == yesterday]
+
+    if not prev_df.empty:
+        high_prev = prev_df["high"].max()
+        low_prev = prev_df["low"].min()
+    else:
+        high_prev = low_prev = None
+
+    fvg_detected = detect_fvg(df)
     news = fetch_market_news()
 
-    msg = f"""
-[📊 {symbol} SCALPING SIGNAL]
-🕒 Session: {session}
-⏰ Time: {now.strftime('%H:%M')}
-💰 Price: {price:.2f}
-📈 RSI: {rsi:.2f} | ATR: {atr:.2f}
-🔼 High (Now): {high_now:.2f}
-🔽 Low (Now): {low_now:.2f}
-🔼 High (Prev): {high_prev:.2f}
-🔽 Low (Prev): {low_prev:.2f}
-📉 FVG: {fvg}
-💥 Liquidity: {liquidity}
+    # Conditions
+    rsi_signal = rsi < 30 or rsi > 70
+    near_high = high_prev is not None and abs(price - high_prev) < 0.002 * price
+    near_low = low_prev is not None and abs(price - low_prev) < 0.002 * price
+
+    opportunity = rsi_signal or near_high or near_low or fvg_detected
+
+    if opportunity:
+        msg = f"""
+📊 {symbol} Market Signal
+💰 Price: {price:.4f}
+📈 RSI: {rsi:.2f} {'✅' if rsi_signal else ''}
+📊 ATR (Liquidity): {atr:.4f}
+🔼 High Prev: {high_prev:.4f} {'✅' if near_high else ''}
+🔽 Low Prev: {low_prev:.4f} {'✅' if near_low else ''}
+📉 FVG Detected: {'✅ at ' + str(fvg_detected) if fvg_detected else '❌'}
 📰 News: {news}
 """
-    send_pushover_alert(msg, title=f"{symbol} Alert")
+        send_pushover_alert(msg, title=f"{symbol} Opportunity")
 
-# تحليل الأصول من TwelveData
+# Analyze assets
 for asset in TWELVE_ASSETS:
     try:
         df = get_twelvedata(asset)
@@ -166,7 +138,6 @@ for asset in TWELVE_ASSETS:
     except Exception as e:
         send_pushover_alert(f"Error with {asset}: {str(e)}", title="Error")
 
-# تحليل الأصول من Yahoo Finance
 for symbol, yf_symbol in YF_ASSETS.items():
     try:
         df = get_yf_data(yf_symbol)
