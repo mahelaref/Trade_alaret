@@ -28,7 +28,9 @@ def send_pushover_alert(message, title="Trade Alert"):
         "token": PUSHOVER_API_TOKEN,
         "user": PUSHOVER_USER_KEY,
         "message": message,
-        "title": title
+        "title": title,
+           "sound": "siren",
+        "priority": 1
     }
     requests.post("https://api.pushover.net/1/messages.json", data=payload)
 
